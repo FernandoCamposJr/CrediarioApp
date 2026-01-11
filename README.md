@@ -1,50 +1,40 @@
-# Welcome to your Expo app 👋
+# 📱 Crediário App - Gestão Financeira Mobile
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Sistema completo de gestão de clientes e débitos desenvolvido em **React Native** com **TypeScript** e **SQLite**. O aplicativo permite o controle total de crediário para pequenos negócios, funcionando 100% offline.
 
-## Get started
+---
 
-1. Install dependencies
+## 🚀 Funcionalidades Principais
 
-   ```bash
-   npm install
-   ```
+* ✅ **Gestão de Clientes (CRUD):** Cadastro, visualização, edição e exclusão de clientes e dívidas.
+* ✅ **Banco de Dados Offline:** Persistência de dados local utilizando **SQLite**, garantindo que nada se perca ao fechar o app.
+* ✅ **Painel Financeiro Inteligente:** Cálculo automático em tempo real do "Total a Receber" de todos os clientes.
+* ✅ **Sistema de Status (Vencimento):**
+    * 🟢 **Verde:** Dívida recente (menos de 30 dias).
+    * 🔴 **Vermelho:** Dívida atrasada (mais de 30 dias).
+* ✅ **Busca Instantânea:** Filtro de clientes por nome em tempo real.
+* ✅ **Cobrança via WhatsApp:** Botão integrado que abre o WhatsApp do cliente com uma mensagem de cobrança personalizada já preenchida.
+* ✅ **UX/UI Refinada:** Máscaras de input automáticas para CPF, Telefone e Data.
 
-2. Start the app
+---
 
-   ```bash
-   npx expo start
-   ```
+## 🛠️ Tecnologias Utilizadas
 
-In the output, you'll find options to open the app in a
+* **Linguagem:** TypeScript
+* **Framework:** React Native (Expo)
+* **Banco de Dados:** Expo SQLite
+* **Roteamento:** Expo Router
+* **Integração:** Linking API (WhatsApp)
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+---
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## 📱 Como rodar o projeto
 
-## Get a fresh project
+### Pré-requisitos
+* Node.js instalado
+* Emulador Android/iOS ou App Expo Go no celular
 
-When you're ready, run:
-
+### Passo a passo
+1. Clone o repositório:
 ```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+git clone [https://github.com/FernandoCamposJr/CrediarioApp.git](https://github.com/FernandoCamposJr/CrediarioApp.git)
