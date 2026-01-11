@@ -1,164 +1,140 @@
-import { useFocusEffect, useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { useCallback, useState } from 'react';
-import { FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { inicializarBanco, usarBanco } from '../../src/database/database';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+
+// Importando o Firebase
+import { collection, deleteDoc, doc, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { db } from '../../src/database/database';
 
 type Cliente = {
-  id: number;
+  id: string; // No Firebase, o ID é texto (ex: "A1b2C3d4")
   nome: string;
-  cpf?: string;
-  telefone?: string;
-  valor_divida?: number;
-  data_compra?: string;
-  endereco?: string;
+  valor_divida: number;
+  data_compra: string;
 }
 
-export default function Index() {
+export default function HomeScreen() {
   const router = useRouter();
-  const db = usarBanco();
-  
-  const [clientes, setClientes] = useState<Cliente[]>([]); 
-  const [totalReceber, setTotalReceber] = useState(0);
-  const [textoBusca, setTextoBusca] = useState('');
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [total, setTotal] = useState(0);
 
-  const listarClientes = async () => {
-    try {
-      const resultado = await db.getAllAsync('SELECT * FROM clientes');
-      const lista = resultado as Cliente[];
-      setClientes(lista);
+  // --- O "OUVIDO" DO FIREBASE (TEMPO REAL) ---
+  useEffect(() => {
+    // 1. Cria a consulta (Busque na coleção 'clientes', ordenado por nome)
+    const q = query(collection(db, "clientes"), orderBy("nome", "asc"));
 
-      const soma = lista.reduce((acumulador, item) => {
-        return acumulador + (item.valor_divida || 0);
-      }, 0);
-      setTotalReceber(soma);
+    // 2. Liga o listener (fofoqueiro)
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const listaTemp: Cliente[] = [];
+      let somaTemp = 0;
 
-    } catch (error) {
-      console.log(error);
-    }
+      snapshot.forEach((doc) => {
+        const dados = doc.data();
+        listaTemp.push({
+          id: doc.id, // Pega o ID do documento
+          nome: dados.nome,
+          valor_divida: Number(dados.valor_divida),
+          data_compra: dados.data_compra
+        });
+        somaTemp += Number(dados.valor_divida || 0);
+      });
+
+      setClientes(listaTemp);
+      setTotal(somaTemp);
+    });
+
+    // 3. Desliga o listener quando sair da tela (para economizar bateria)
+    return () => unsubscribe();
+  }, []);
+
+  // --- FUNÇÃO DE EXCLUIR ---
+  const excluir = (id: string) => {
+    Alert.alert('Excluir', 'Tem certeza?', [
+      { text: 'Não', style: 'cancel' },
+      { 
+        text: 'Sim', 
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteDoc(doc(db, "clientes", id));
+            // Não precisa atualizar a lista manualmente, o onSnapshot faz isso!
+          } catch (erro) {
+            console.log(erro);
+            Alert.alert("Erro", "Não foi possível excluir.");
+          }
+        }
+      }
+    ]);
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      inicializarBanco(); 
-      listarClientes();   
-    }, [])
-  );
-
-  const clientesFiltrados = clientes.filter((cliente) => 
-    cliente.nome.toLowerCase().includes(textoBusca.toLowerCase())
-  );
-
-  const calcularDiasAtraso = (dataString?: string) => {
-    if (!dataString) return 0;
-    const dataLimpa = dataString.replace(/[-.]/g, '/');
-    const partes = dataLimpa.split('/');
-    if (partes.length !== 3) return 0;
-    
-    const dia = Number(partes[0]);
-    const mes = Number(partes[1]) - 1; 
-    const ano = Number(partes[2]);
-    const anoCorrigido = ano < 100 ? 2000 + ano : ano;
-
-    const dataCompra = new Date(anoCorrigido, mes, dia);
+  // --- LÓGICA DE COR (VERMELHO SE PASSOU DE 30 DIAS) ---
+  const verificarAtraso = (dataString: string) => {
+    if (!dataString) return false;
+    const [dia, mes, ano] = dataString.split('/').map(Number);
+    const dataCompra = new Date(ano, mes - 1, dia);
     const hoje = new Date();
-    const diferencaTempo = hoje.getTime() - dataCompra.getTime();
-    return Math.ceil(diferencaTempo / (1000 * 3600 * 24));
-  };
-
-  const obterCorStatus = (data?: string) => {
-    const dias = calcularDiasAtraso(data);
-    return dias > 30 ? '#ff4d4d' : '#00e676';
+    const diferenca = hoje.getTime() - dataCompra.getTime();
+    const dias = diferenca / (1000 * 3600 * 24);
+    return dias > 30;
   };
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" />
-      <Text style={styles.titulo}>Carteira de Clientes</Text>
-
-      {/* Painel Financeiro */}
-      <View style={styles.painelTotal}>
-        <Text style={styles.painelTitulo}>TOTAL A RECEBER</Text>
-        <Text style={styles.painelValor}>R$ {totalReceber.toFixed(2)}</Text>
+      <View style={styles.header}>
+        <Text style={styles.titulo}>Crediário</Text>
+        <Text style={styles.subtitulo}>Total a Receber</Text>
+        <Text style={styles.valorTotal}>
+          {total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+        </Text>
       </View>
 
-      {/* Busca */}
-      <TextInput 
-        style={styles.inputBusca}
-        placeholder="🔍 Pesquisar cliente..."
-        placeholderTextColor="#777"
-        value={textoBusca}
-        onChangeText={setTextoBusca}
-      />
-
-      <FlatList
-        data={clientesFiltrados}
-        keyExtractor={(item) => String(item.id)}
-        ListEmptyComponent={<Text style={{color: '#777', textAlign: 'center', marginTop: 20}}>Nenhum cliente encontrado.</Text>}
+      <FlatList 
+        data={clientes}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={{ paddingBottom: 100 }}
+        ListEmptyComponent={
+          <Text style={styles.vazio}>Nenhum cliente devendo! 🎉</Text>
+        }
         renderItem={({ item }) => {
-          const diasAtraso = calcularDiasAtraso(item.data_compra);
-
+          const estaAtrasado = verificarAtraso(item.data_compra);
           return (
             <TouchableOpacity 
-              style={styles.card} 
+              style={[styles.card, estaAtrasado && styles.cardAtrasado]} 
               onPress={() => router.push(`/cadastro?id=${item.id}`)}
+              onLongPress={() => excluir(item.id)}
             >
-              <View>
-                <Text style={[styles.nome, { color: obterCorStatus(item.data_compra) }]}>
-                  {item.nome}
-                </Text>
-                <Text style={styles.valor}>R$ {item.valor_divida ? item.valor_divida.toFixed(2) : '0.00'}</Text>
+              <View style={styles.info}>
+                <Text style={styles.nome}>{item.nome}</Text>
+                <Text style={styles.data}>{item.data_compra}</Text>
               </View>
-              
-              <View style={styles.ladoDireito}>
-                <Text style={styles.dias}>{diasAtraso}</Text>
-                <Text style={styles.legenda}>dias</Text>
-              </View>
+              <Text style={styles.valor}>
+                {item.valor_divida.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              </Text>
             </TouchableOpacity>
-          )
+          );
         }}
       />
-      
+
       <TouchableOpacity style={styles.fab} onPress={() => router.push('/cadastro')}>
-        <Text style={styles.fabText}>+</Text>
+        <Ionicons name="add" size={30} color="#FFF" />
       </TouchableOpacity>
     </View>
   );
 }
 
-// AQUI ESTAVA FALTANDO O CONTEÚDO:
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#121212', paddingTop: 60, paddingHorizontal: 20 },
-  titulo: { fontSize: 28, fontWeight: 'bold', color: '#fff', marginBottom: 20 },
-  
-  painelTotal: {
-    backgroundColor: '#0066cc',
-    padding: 20,
-    borderRadius: 15,
-    marginBottom: 15,
-    alignItems: 'center',
-    elevation: 5,
-  },
-  painelTitulo: { color: '#rgba(255,255,255,0.8)', fontSize: 14, fontWeight: 'bold', textTransform: 'uppercase' },
-  painelValor: { color: '#fff', fontSize: 32, fontWeight: 'bold', marginTop: 5 },
-
-  inputBusca: {
-    backgroundColor: '#1e1e1e',
-    color: '#fff',
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#333',
-    marginBottom: 15,
-    fontSize: 16,
-  },
-
-  card: { backgroundColor: '#1e1e1e', padding: 15, borderRadius: 12, marginBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: '#333' },
-  nome: { fontSize: 18, fontWeight: 'bold' },
-  valor: { color: '#ccc', fontSize: 16, marginTop: 4 },
-  ladoDireito: { alignItems: 'center' },
-  dias: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
-  legenda: { color: '#777', fontSize: 12 },
-  fab: { position: 'absolute', bottom: 30, right: 30, width: 60, height: 60, backgroundColor: '#0066cc', borderRadius: 30, alignItems: 'center', justifyContent: 'center', elevation: 5 },
-  fabText: { color: '#fff', fontSize: 30, marginTop: -4 }
+  container: { flex: 1, backgroundColor: '#121212', padding: 20, paddingTop: 50 },
+  header: { alignItems: 'center', marginBottom: 30 },
+  titulo: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
+  subtitulo: { color: '#888', fontSize: 14, marginTop: 5 },
+  valorTotal: { color: '#4caf50', fontSize: 32, fontWeight: 'bold', marginTop: 5 },
+  vazio: { color: '#555', textAlign: 'center', marginTop: 50, fontSize: 16 },
+  card: { backgroundColor: '#1e1e1e', padding: 20, borderRadius: 12, marginBottom: 15, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: '#333' },
+  cardAtrasado: { borderColor: '#ff4444', borderWidth: 1, backgroundColor: '#2a1a1a' },
+  info: { flex: 1 },
+  nome: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  data: { color: '#888', fontSize: 14 },
+  valor: { color: '#eee', fontSize: 18, fontWeight: 'bold' },
+  fab: { position: 'absolute', bottom: 30, right: 30, backgroundColor: '#0066cc', width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOpacity: 0.3, shadowOffset: { width: 0, height: 2 } }
 });

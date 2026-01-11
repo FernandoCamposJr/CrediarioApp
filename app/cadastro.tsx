@@ -1,21 +1,13 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { usarBanco } from '../src/database/database';
 
-type Cliente = {
-  id: number;
-  nome: string;
-  cpf?: string;
-  telefone?: string;
-  valor_divida?: number;
-  data_compra?: string;
-  endereco?: string;
-}
+// Importações do Firebase
+import { addDoc, collection, deleteDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { db } from '../src/database/database';
 
 export default function Cadastro() {
   const router = useRouter();
-  const db = usarBanco(); 
   const { id } = useLocalSearchParams(); 
 
   const [nome, setNome] = useState('');
@@ -24,6 +16,7 @@ export default function Cadastro() {
   const [valor, setValor] = useState('');
   const [dataCompra, setDataCompra] = useState('');
   const [endereco, setEndereco] = useState('');
+  const [carregando, setCarregando] = useState(false);
 
   const formatarCPF = (texto: string) => {
     let v = texto.replace(/\D/g, ''); 
@@ -60,7 +53,6 @@ export default function Cadastro() {
     const numeroLimpo = telefone.replace(/\D/g, '');
     const mensagem = `Olá ${nome}, tudo bem? Estou entrando em contato referente ao seu débito de R$ ${valor} no Crediário.`;
     const link = `whatsapp://send?phone=55${numeroLimpo}&text=${mensagem}`;
-
     Linking.openURL(link).catch(() => {
       Alert.alert('Erro', 'Não foi possível abrir o WhatsApp.');
     });
@@ -70,9 +62,10 @@ export default function Cadastro() {
     if (id) {
       const carregarDados = async () => {
         try {
-          const resultado = await db.getFirstAsync('SELECT * FROM clientes WHERE id = ?', [Number(id)]);
-          const cliente = resultado as Cliente; 
-          if (cliente) {
+          const docRef = doc(db, "clientes", id as string);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            const cliente = docSnap.data();
             setNome(cliente.nome);
             setCpf(cliente.cpf || '');
             setTelefone(cliente.telefone || '');
@@ -82,6 +75,7 @@ export default function Cadastro() {
           }
         } catch (erro) {
           console.log(erro);
+          Alert.alert("Erro", "Falha ao carregar cliente.");
         }
       };
       carregarDados();
@@ -89,42 +83,49 @@ export default function Cadastro() {
   }, [id]);
 
   const salvar = async () => {
+    if (!nome || !valor) {
+      Alert.alert('Erro', 'Nome e Valor são obrigatórios!');
+      return;
+    }
+    setCarregando(true);
+    const valorCorrigido = Number(valor.replace(',', '.'));
     try {
-      if (!nome || !valor) {
-        Alert.alert('Erro', 'Nome e Valor são obrigatórios!');
-        return;
-      }
-      const valorCorrigido = Number(valor.replace(',', '.'));
       if (id) {
-        await db.runAsync(
-          'UPDATE clientes SET nome=?, cpf=?, telefone=?, endereco=?, valor_divida=?, data_compra=? WHERE id=?',
-          [nome, cpf, telefone, endereco, valorCorrigido, dataCompra, Number(id)]
-        );
-        Alert.alert('Sucesso', 'Dados atualizados!');
+        await updateDoc(doc(db, "clientes", id as string), {
+          nome, cpf, telefone, endereco, 
+          valor_divida: valorCorrigido, 
+          data_compra: dataCompra
+        });
+        Alert.alert('Sucesso', 'Dados atualizados na nuvem!');
       } else {
-        await db.runAsync(
-          'INSERT INTO clientes (nome, cpf, telefone, endereco, valor_divida, data_compra) VALUES (?, ?, ?, ?, ?, ?)',
-          [nome, cpf, telefone, endereco, valorCorrigido, dataCompra]
-        );
-        Alert.alert('Sucesso', 'Cliente cadastrado!');
+        await addDoc(collection(db, "clientes"), {
+          nome, cpf, telefone, endereco, 
+          valor_divida: valorCorrigido, 
+          data_compra: dataCompra
+        });
+        Alert.alert('Sucesso', 'Cliente salvo na nuvem!');
       }
       router.back(); 
     } catch (error) {
       console.log(error);
-      Alert.alert('Erro', 'Erro ao salvar.');
+      Alert.alert('Erro', 'Erro ao salvar no Google.');
+    } finally {
+      setCarregando(false);
     }
   };
 
   const excluir = async () => {
     try {
-      await db.runAsync('DELETE FROM clientes WHERE id = ?', [Number(id)]);
-      Alert.alert('Excluído', 'Cliente removido da lista.');
+      await deleteDoc(doc(db, "clientes", id as string));
+      Alert.alert('Excluído', 'Cliente removido.');
       router.back();
     } catch (error) {
       console.log(error);
+      Alert.alert('Erro', 'Erro ao excluir.');
     }
   };
 // ... CONTINUA NA PARTE 2
+
 
 return (
     <KeyboardAvoidingView 
@@ -159,8 +160,8 @@ return (
           <Text style={styles.label}>Endereço</Text>
           <TextInput style={[styles.input, styles.inputEndereco]} value={endereco} multiline={true} placeholderTextColor="#777" onChangeText={setEndereco} />
 
-          <TouchableOpacity style={styles.botaoSalvar} onPress={salvar}>
-            <Text style={styles.textoBotao}>{id ? 'ATUALIZAR DADOS' : 'SALVAR CLIENTE'}</Text>
+          <TouchableOpacity style={styles.botaoSalvar} onPress={salvar} disabled={carregando}>
+            <Text style={styles.textoBotao}>{carregando ? 'SALVANDO...' : (id ? 'ATUALIZAR DADOS' : 'SALVAR NO FIREBASE')}</Text>
           </TouchableOpacity>
 
           {id && (
